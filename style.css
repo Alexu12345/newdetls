@@ -284,3 +284,31 @@ td {
     }
 }
 
+/* ألوان الخطوط الذكية */
+.row-red { color: #ff4d4d !important; font-weight: 600; }
+.row-yellow { color: #ffcc00 !important; font-weight: 600; }
+.row-green { color: #00ff88 !important; font-weight: 600; }
+.row-gold { color: #ffcc33 !important; font-weight: 800; text-shadow: 0 0 5px rgba(255, 204, 51, 0.4); }
+
+/* تظليل نص البحث */
+.highlight {
+    background-color: rgba(255, 255, 0, 0.3);
+    border-radius: 4px;
+    padding: 0 2px;
+    color: inherit;
+}
+
+/* خانة البحث السريع */
+.search-container {
+    margin-bottom: 15px;
+    display: flex;
+    gap: 10px;
+}
+#table-search {
+    flex: 1;
+    padding: 10px 15px;
+    border-radius: 10px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+}
