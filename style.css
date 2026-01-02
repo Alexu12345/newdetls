@@ -314,3 +314,26 @@ td {
     color: var(--text-main);
 }
 
+.switch-button {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    display: flex;
+    padding: 4px;
+    gap: 4px;
+}
+.switch-button button {
+    padding: 6px 15px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-main);
+    font-weight: 600;
+    transition: 0.3s;
+}
+.switch-button button.active-switch {
+    background: var(--primary-color);
+    color: white;
+    box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+}
