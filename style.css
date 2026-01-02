@@ -337,3 +337,4 @@ td {
     color: white;
     box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
 }
+.row-silver { color: #d1d5db !important; font-weight: 600; } /* رمادي فاتح مائل للفضي */
