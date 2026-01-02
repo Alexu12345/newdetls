@@ -8,6 +8,26 @@ const firebaseConfig = {
     appId: "1:246595598451:web:c6842f1618dffe765a5206"
 };
 
+// --- محرك الدارك مود ---
+const themeToggle = document.getElementById('theme-toggle');
+
+themeToggle.addEventListener('click', () => {
+    // تبديل الكلاس في الـ body
+    document.body.classList.toggle('dark-mode');
+    
+    // تغيير الأيقونة
+    const isDark = document.body.classList.contains('dark-mode');
+    themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    
+    // حفظ الاختيار عشان لما تعمل ريفريش ميرجعش فاتح تاني
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+});
+
+// التأكد من الوضع المختار عند تحميل الصفحة
+if (localStorage.getItem('theme') === 'dark') {
+    document.body.classList.add('dark-mode');
+    themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+}
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
@@ -171,3 +191,4 @@ function renderTable(summary, headName, totalT, totalM) {
 
 function showLoader(show) { document.getElementById('loader').classList.toggle('hidden', !show); }
 init();
+
