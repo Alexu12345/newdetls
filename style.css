@@ -231,4 +231,54 @@ td {
     margin: 0 auto 15px;
 }
 
+
 @keyframes spin { to { transform: rotate(360deg); } }
+
+
+@media print {
+    /* اخفاء الهيدر، الفلاتر، زرار الدارك مود، وأزرار التصدير */
+    .glass-header, 
+    .filter-section, 
+    .export-btns, 
+    #theme-toggle,
+    .primary-btn {
+        display: none !important;
+    }
+
+    /* توسيع الحاوية لتأخذ عرض الصفحة بالكامل */
+    body {
+        background: white !important;
+        padding: 0 !important;
+    }
+
+    .app-container {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
+    /* إظهار منطقة النتائج والكروت فقط */
+    .results-section, .stats-grid {
+        display: block !important;
+        box-shadow: none !important;
+        border: none !important;
+        background: white !important;
+        color: black !important;
+    }
+
+    /* تحسين شكل الجدول في الطباعة */
+    table {
+        width: 100% !important;
+        border: 1px solid #ccc !important;
+    }
+
+    th, td {
+        color: black !important;
+        border-bottom: 1px solid #eee !important;
+    }
+
+    .grand-total-row {
+        background-color: #f0f0f0 !important;
+        color: black !important;
+        -webkit-print-color-adjust: exact; /* لضمان ظهور اللون في الطباعة */
+    }
+}
