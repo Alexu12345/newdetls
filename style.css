@@ -338,3 +338,53 @@ td {
     box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
 }
 .row-silver { color: #d1d5db !important; font-weight: 600; } /* رمادي فاتح مائل للفضي */
+
+
+/* الألوان الجديدة */
+.row-gold { color: #FFD700 !important; font-weight: bold; position: relative; border: 2px solid #FFD700 !important; background: rgba(255, 215, 0, 0.05); }
+.row-silver { color: #C0C0C0 !important; font-weight: bold; position: relative; border: 1px solid #C0C0C0 !important; background: rgba(192, 192, 192, 0.05); }
+.row-orange { color: #FF8C00 !important; font-weight: 600; } /* البرتقالي بدلاً من الأصفر */
+
+/* أنيميشن المجرة خلف الصفوف */
+.row-gold, .row-silver {
+    background-image: radial-gradient(circle at center, rgba(255,255,255,0.1) 1px, transparent 1px);
+    background-size: 20px 20px;
+    animation: galaxyMove 10s linear infinite;
+}
+
+@keyframes galaxyMove {
+    from { background-position: 0 0; }
+    to { background-position: 100px 100px; }
+}
+
+/* أزرار التصدير الكبيرة والفخمة */
+.export-buttons {
+    display: flex;
+    gap: 20px;
+    margin-top: 20px;
+}
+.export-buttons button {
+    padding: 15px 30px;
+    font-size: 1.1rem;
+    border-radius: 12px;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: pointer;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.export-buttons button:hover {
+    transform: translateY(-5px) scale(1.05);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+
+/* تنسيق الطباعة الرسمي - إخفاء كل ما هو ليس تقريراً */
+@media print {
+    .filters-section, .export-buttons, #theme-toggle, .search-container, #view-switch-container {
+        display: none !important;
+    }
+    body { background: white; color: black; }
+    .container { width: 100%; max-width: none; padding: 0; }
+    table { border: 1px solid #ccc; width: 100%; }
+}
