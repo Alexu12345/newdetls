@@ -11,11 +11,12 @@ const firebaseConfig = {
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// المتغيرات العامة
+// 2. المتغيرات العامة وخزان البيانات
 let accountsData = {};
 let userRates = {};
+let lastFetchedRecords = []; // الخزان المحلي (Cache)
 
-// 2. الدوال المساعدة المحسنة
+// 3. الدوال المساعدة (تنسيق، تقريب، ألوان)
 const formatTime = (totalMinutes) => {
     if (!totalMinutes || totalMinutes <= 0) return "0س 0د 0ث";
     const totalSeconds = Math.floor(totalMinutes * 60);
@@ -27,7 +28,16 @@ const formatTime = (totalMinutes) => {
 
 const roundToTen = (amount) => Math.round(amount / 10) * 10;
 
-// دالة توليد اسم الملف الذكي
+// تحديد كلاس اللون بناءً على عدد الساعات
+function getStatusClass(totalMinutes) {
+    const hours = totalMinutes / 60;
+    if (hours >= 150) return 'row-gold';
+    if (hours >= 100) return 'row-green';
+    if (hours >= 80) return 'row-yellow';
+    return 'row-red';
+}
+
+// توليد اسم الملف الذكي للتصدير
 function getDynamicFileName() {
     const userF = document.getElementById('user-filter');
     const accF = document.getElementById('account-filter');
@@ -43,18 +53,15 @@ function getDynamicFileName() {
         if(mVal) parts.push(new Date(mVal).toLocaleDateString('ar-EG', {month:'long', year:'numeric'}));
     }
     else if (dateM === 'year') parts.push(document.getElementById('year-val')?.value || "");
-    else if (dateM === 'range') parts.push(`${document.getElementById('date-start')?.value} to ${document.getElementById('date-end')?.value}`);
+    else if (dateM === 'range') parts.push(`${document.getElementById('date-start')?.value}_إلى_${document.getElementById('date-end')?.value}`);
 
     return parts.length ? parts.join(' - ') : "تقرير_عام";
 }
 
-// 3. الإعدادات عند تشغيل الصفحة
+// 4. المحرك الرئيسي عند تحميل الصفحة
 window.onload = async () => {
+    // --- تفعيل الدارك مود ---
     const themeToggle = document.getElementById('theme-toggle');
-    const dateType = document.getElementById('date-type');
-    const dynamicDateContainer = document.getElementById('dynamic-date-container');
-
-    // تفعيل الدارك مود
     const toggleTheme = (isDark) => {
         document.body.classList.toggle('dark-mode', isDark);
         themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
@@ -66,7 +73,7 @@ window.onload = async () => {
     };
     if (localStorage.getItem('theme') === 'dark') toggleTheme(true);
 
-    // جلب البيانات الأساسية
+    // --- جلب البيانات الأساسية (Accounts & Rates) ---
     const [accs, rates] = await Promise.all([
         db.collection('accounts').get(),
         db.collection('userAccountRates').get()
@@ -86,7 +93,9 @@ window.onload = async () => {
         document.getElementById('user-filter').innerHTML += `<option value="${doc.data().name}">${doc.data().name}</option>`;
     });
 
-    // تبديل حقول التاريخ
+    // --- تبديل حقول التاريخ ---
+    const dateType = document.getElementById('date-type');
+    const dynamicDateContainer = document.getElementById('dynamic-date-container');
     dateType.onchange = () => {
         const val = dateType.value;
         dynamicDateContainer.classList.remove('hidden');
@@ -100,10 +109,9 @@ window.onload = async () => {
         else dynamicDateContainer.classList.add('hidden');
     };
 
-    // 4. تنفيذ التصفية
+    // --- تنفيذ التصفية والبحث ---
     document.getElementById('apply-filters-btn').onclick = async () => {
-        const loader = document.getElementById('loader');
-        loader.classList.remove('hidden');
+        document.getElementById('loader').classList.remove('hidden');
         
         let query = db.collection('workRecords');
         const accF = document.getElementById('account-filter').value;
@@ -112,7 +120,7 @@ window.onload = async () => {
         if(accF !== 'all') query = query.where('accountId', '==', accF);
         if(userF !== 'all') query = query.where('userName', '==', userF);
 
-        // محرك التاريخ المطور
+        // منطق التاريخ الشامل
         const mode = dateType.value;
         let start, end;
         if (mode === 'day') {
@@ -141,12 +149,41 @@ window.onload = async () => {
 
         try {
             const snap = await query.get();
-            processAndRender(snap, accF, userF);
+            lastFetchedRecords = [];
+            snap.forEach(doc => lastFetchedRecords.push(doc.data()));
+            processAndRender(lastFetchedRecords, accF, userF);
         } catch (err) { console.error(err); }
-        loader.classList.add('hidden');
+        document.getElementById('loader').classList.add('hidden');
     };
 
-    // زراير التصدير
+    // --- البحث السريع مع التظليل ---
+    document.getElementById('table-search').addEventListener('input', function() {
+        const term = this.value.toLowerCase();
+        const rows = document.querySelectorAll('#table-body tr');
+
+        rows.forEach(row => {
+            const cells = Array.from(row.cells);
+            const match = cells.some(cell => cell.getAttribute('data-orig')?.toLowerCase().includes(term) || cell.innerText.toLowerCase().includes(term));
+            
+            row.style.display = match ? "" : "none";
+            
+            if (match && term) {
+                cells.forEach(cell => {
+                    const originalText = cell.getAttribute('data-orig') || cell.innerText;
+                    if (!cell.getAttribute('data-orig')) cell.setAttribute('data-orig', originalText);
+                    
+                    const regex = new RegExp(`(${term})`, 'gi');
+                    cell.innerHTML = originalText.replace(regex, '<span class="highlight">$1</span>');
+                });
+            } else {
+                cells.forEach(cell => {
+                    if (cell.getAttribute('data-orig')) cell.innerHTML = cell.getAttribute('data-orig');
+                });
+            }
+        });
+    });
+
+    // --- أزرار التصدير ---
     document.getElementById('export-excel').onclick = () => {
         const wb = XLSX.utils.table_to_book(document.getElementById('reports-table'));
         XLSX.writeFile(wb, `${getDynamicFileName()}.xlsx`);
@@ -159,13 +196,13 @@ window.onload = async () => {
     };
 };
 
-function processAndRender(snapshot, accF, userF) {
+// 5. معالجة ورسم البيانات
+function processAndRender(records, accF, userF) {
     let summary = {}, totalT = 0, totalM = 0;
     let groupKey = (userF !== 'all' && accF === 'all') ? 'accountId' : 
                    (accF !== 'all' && userF === 'all' ? 'userName' : 'date');
 
-    snapshot.forEach(doc => {
-        const rec = doc.data();
+    records.forEach(rec => {
         let key = groupKey === 'accountId' ? (accountsData[rec.accountId]?.name || 'حساب غير معروف') :
                   (groupKey === 'userName' ? rec.userName : new Date(rec.timestamp.seconds * 1000).toLocaleDateString('ar-EG'));
 
@@ -188,7 +225,12 @@ function renderUI(summary, groupKey, totalT, totalM) {
     
     let html = '';
     Object.keys(summary).forEach(k => {
-        html += `<tr><td>${k}</td><td>${formatTime(summary[k].time)}</td><td>${roundToTen(summary[k].money).toLocaleString()} ج.م</td></tr>`;
+        const statusClass = getStatusClass(summary[k].time);
+        html += `<tr class="${statusClass}">
+            <td data-orig="${k}">${k}</td>
+            <td data-orig="${formatTime(summary[k].time)}">${formatTime(summary[k].time)}</td>
+            <td data-orig="${roundToTen(summary[k].money).toLocaleString()} ج.م">${roundToTen(summary[k].money).toLocaleString()} ج.م</td>
+        </tr>`;
     });
     
     document.getElementById('table-body').innerHTML = html;
@@ -197,12 +239,9 @@ function renderUI(summary, groupKey, totalT, totalM) {
     document.getElementById('stat-total-time').innerText = formatTime(totalT);
     document.getElementById('stat-total-money').innerText = `${roundToTen(totalM).toLocaleString()} ج.م`;
 
-    // الأنيميشن المطور باستخدام GSAP Timeline
-    const results = document.getElementById('results-section');
-    const stats = document.getElementById('stats-container');
-    
-    results.classList.remove('hidden');
-    stats.classList.remove('hidden');
+    // إظهار النتائج والأنيميشن
+    document.getElementById('results-section').classList.remove('hidden');
+    document.getElementById('stats-container').classList.remove('hidden');
 
     const tl = gsap.timeline();
     tl.fromTo(".stat-card", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: "back.out(1.7)" })
