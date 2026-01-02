@@ -24,6 +24,19 @@
                 <i class="fas fa-chart-line-pie"></i>
                 <h1>لوحة التقارير المتقدمة</h1>
             </div>
+            <div id="alert-button-container" style="position: relative; display: inline-block;">
+                    <button id="violations-btn" class="btn-safe">
+                        <i class="fas fa-exclamation-triangle"></i> تحذيرات التخطي
+                    </button>
+                    <span id="violation-badge" class="badge hidden">0</span>
+                </div>
+                <div id="violation-modal" class="modal hidden">
+                    <div class="modal-content">
+                        <span class="close-modal">&times;</span>
+                        <h2><i class="fas fa-shield-alt"></i> سجل تخطي الحدود (أكثر من 8 ساعات)</h2>
+                        <div id="violation-list"></div>
+                    </div>
+                </div>
             <button id="theme-toggle" class="theme-btn">
                 <i class="fas fa-moon"></i>
             </button>
@@ -87,21 +100,6 @@
                         <h3 id="stat-total-money">0.00 ج.م</h3>
                     </div>
                 </div>
-                <div id="alert-button-container" style="position: relative; display: inline-block;">
-    <button id="violations-btn" class="btn-safe">
-        <i class="fas fa-exclamation-triangle"></i> تحذيرات التخطي
-    </button>
-    <span id="violation-badge" class="badge hidden">0</span>
-</div>
-
-<div id="violation-modal" class="modal hidden">
-    <div class="modal-content">
-        <span class="close-modal">&times;</span>
-        <h2><i class="fas fa-shield-alt"></i> سجل تخطي الحدود (أكثر من 8 ساعات)</h2>
-        <div id="violation-list">
-            </div>
-    </div>
-</div>
                 <div class="stat-card glass-card">
                     <i class="fas fa-user-tie text-purple"></i>
                     <div class="stat-card">
@@ -161,6 +159,7 @@
 </body>
 
 </html>
+
 
 
 
