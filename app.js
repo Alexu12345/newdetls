@@ -17,12 +17,11 @@ let accountsData = {};
 let userRates = {};
 let lastFetchedRecords = []; 
 let currentViewMode = 'date'; 
+let violations = []; // خزان حالات التخطي الجديد
 
-// --- 3. الدوال المساعدة (منطق الجودة) ---
+// --- 3. الدوال المساعدة ---
 
-// إظهار تنبيهات للمستخدم بدل الصمت
 function showNotice(message) {
-    // يمكنك استبدالها بـ Toast UI لاحقاً لشكل أجمل
     alert(message);
 }
 
@@ -35,33 +34,101 @@ const formatTime = (totalMinutes) => {
 
 const roundToTen = (amount) => Math.round(amount / 10) * 10;
 
-// محرك الألوان المطور (ذهبي مجري، فضي مجري، برتقالي)
 function getFlexibleStatusClass(currentMinutes, maxMinutes) {
     if (!maxMinutes || maxMinutes <= 0) return '';
     const percentage = (currentMinutes / maxMinutes) * 100;
-    
-    if (percentage >= 90) return 'row-gold';   // الذهبي المطور
-    if (percentage >= 75) return 'row-silver'; // الفضي المطور
-    if (percentage >= 50) return 'row-green';  // أخضر
-    if (percentage >= 25) return 'row-orange'; // البرتقالي بدلاً من الأصفر
-    return 'row-red';                          // أحمر
+    if (percentage >= 90) return 'row-gold';
+    if (percentage >= 75) return 'row-silver';
+    if (percentage >= 50) return 'row-green';
+    if (percentage >= 25) return 'row-orange';
+    return 'row-red';
 }
 
-// تسمية الملفات الديناميكية للتصدير
 function getDynamicFileName() {
     const userF = document.getElementById('user-filter');
     const accF = document.getElementById('account-filter');
     const dateM = document.getElementById('date-type').value;
-    
     let parts = ["تقرير_العمل"];
     if (dateM !== 'all') parts.push(dateM);
     if (userF.value !== 'all') parts.push(userF.value);
     if (accF.value !== 'all') parts.push(accF.options[accF.selectedIndex].text);
-    
     return parts.join('_');
 }
 
-// --- 4. المحرك الرئيسي ---
+// --- 4. منطق رادار التخطي (الجديد والمدمج بعناية) ---
+
+function checkViolations(records) {
+    violations = [];
+    let dailyAccLog = {}; 
+
+    records.forEach(rec => {
+        const dateStr = new Date(rec.timestamp.seconds * 1000).toLocaleDateString('ar-EG');
+        const accName = accountsData[rec.accountId]?.name || 'غير معروف';
+        const key = `${dateStr}_${accName}`;
+
+        if (!dailyAccLog[key]) {
+            dailyAccLog[key] = { date: dateStr, account: accName, totalMins: 0, users: new Set() };
+        }
+        dailyAccLog[key].totalMins += rec.totalTime;
+        dailyAccLog[key].users.add(rec.userName);
+    });
+
+    for (let key in dailyAccLog) {
+        if (dailyAccLog[key].totalMins > 480) { // تخطي 8 ساعات
+            violations.push(dailyAccLog[key]);
+        }
+    }
+    updateViolationUI();
+}
+
+function updateViolationUI() {
+    const btn = document.getElementById('violations-btn');
+    const badge = document.getElementById('violation-badge');
+    if (!btn || !badge) return;
+
+    if (violations.length > 0) {
+        btn.classList.add('btn-danger');
+        btn.classList.remove('btn-safe');
+        badge.innerText = violations.length;
+        badge.classList.remove('hidden');
+    } else {
+        btn.classList.add('btn-safe');
+        btn.classList.remove('btn-danger');
+        badge.classList.add('hidden');
+    }
+}
+
+function showViolationDetails() {
+    let html = `
+        <table class="violation-table" style="width:100%; border-collapse: collapse; margin-top:15px;">
+            <thead>
+                <tr style="border-bottom: 2px solid #e74c3c; text-align: right;">
+                    <th style="padding:10px;">التاريخ</th>
+                    <th style="padding:10px;">الحساب</th>
+                    <th style="padding:10px;">الوقت الكلي</th>
+                    <th style="padding:10px;">الموظفين</th>
+                </tr>
+            </thead>
+            <tbody>`;
+    
+    violations.forEach(v => {
+        html += `
+            <tr style="border-bottom: 1px solid #444;">
+                <td style="padding:10px;">${v.date}</td>
+                <td style="padding:10px;">${v.account}</td>
+                <td style="padding:10px; color:#e74c3c; font-weight:bold;">${(v.totalMins / 60).toFixed(1)} ساعة</td>
+                <td style="padding:10px;">${Array.from(v.users).join(' - ')}</td>
+            </tr>`;
+    });
+
+    html += `</tbody></table>`;
+    if(violations.length === 0) html = "<p style='text-align:center; padding:20px;'>لا توجد تجاوزات للحد المسموح (8 ساعات) في هذه الفترة ✅</p>";
+    
+    document.getElementById('violation-list').innerHTML = html;
+    document.getElementById('violation-modal').classList.remove('hidden');
+}
+
+// --- 5. المحرك الرئيسي (Window Onload) ---
 
 window.onload = async () => {
     const themeToggle = document.getElementById('theme-toggle');
@@ -70,21 +137,24 @@ window.onload = async () => {
     const viewSwitch = document.getElementById('view-switch-container');
     const btnMonths = document.getElementById('view-months');
 
-    // أزرار التبديل (Pivot Switch)
+    // تفعيل أزرار النافذة المنبثقة
+    const vBtn = document.getElementById('violations-btn');
+    if(vBtn) vBtn.onclick = showViolationDetails;
+    
+    const closeBtn = document.querySelector('.close-modal');
+    if(closeBtn) closeBtn.onclick = () => document.getElementById('violation-modal').classList.add('hidden');
+
     document.querySelectorAll('.switch-button button').forEach(btn => {
         btn.onclick = function() {
             document.querySelectorAll('.switch-button button').forEach(b => b.classList.remove('active-switch'));
             this.classList.add('active-switch');
-            
             if(this.id === 'view-days') currentViewMode = 'date';
             else if(this.id === 'view-months') currentViewMode = 'month';
             else currentViewMode = 'userName';
-            
             processAndRender(lastFetchedRecords);
         };
     });
 
-    // تبديل الدارك مود
     const toggleTheme = (isDark) => {
         document.body.classList.toggle('dark-mode', isDark);
         themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
@@ -96,23 +166,19 @@ window.onload = async () => {
     };
     if (localStorage.getItem('theme') === 'dark') toggleTheme(true);
 
-    // جلب البيانات الأساسية مع معالجة الأخطاء
     try {
         const [accSnap, rateSnap] = await Promise.all([
             db.collection('accounts').get(),
             db.collection('userAccountRates').get()
         ]);
-        
         accSnap.forEach(doc => {
             accountsData[doc.id] = doc.data();
             document.getElementById('account-filter').innerHTML += `<option value="${doc.id}">${doc.data().name}</option>`;
         });
-        
         rateSnap.forEach(doc => {
             const d = doc.data();
             userRates[`${d.userId}_${d.accountId}`] = d.customPricePerHour;
         });
-
         const userSnap = await db.collection('users').where('role', '==', 'user').get();
         userSnap.forEach(doc => {
             document.getElementById('user-filter').innerHTML += `<option value="${doc.data().name}">${doc.data().name}</option>`;
@@ -121,7 +187,6 @@ window.onload = async () => {
         showNotice("حدث خطأ في الاتصال بقاعدة البيانات. تأكد من جودة الإنترنت.");
     }
 
-    // إدارة حقول التاريخ
     dateType.onchange = () => {
         const val = dateType.value;
         dynamicDateContainer.classList.remove('hidden');
@@ -134,12 +199,10 @@ window.onload = async () => {
         else dynamicDateContainer.classList.add('hidden');
     };
 
-    // تطبيق البحث والفلترة
     document.getElementById('apply-filters-btn').onclick = async () => {
         const mode = dateType.value;
         let start, end;
 
-        // فحص جودة التواريخ قبل البدء
         if (mode === 'range') {
             const s = document.getElementById('date-start')?.value;
             const e = document.getElementById('date-end')?.value;
@@ -156,15 +219,12 @@ window.onload = async () => {
         if(accF !== 'all') query = query.where('accountId', '==', accF);
         if(userF !== 'all') query = query.where('userName', '==', userF);
 
-        // إظهار سويتش الشهور للنطاقات الطويلة
         if (mode === 'year' || mode === 'range') btnMonths.classList.remove('hidden');
         else { btnMonths.classList.add('hidden'); if(currentViewMode === 'month') currentViewMode = 'date'; }
 
-        // السويتش العام
         if (accF === 'all' && userF === 'all') viewSwitch.classList.remove('hidden');
         else viewSwitch.classList.add('hidden');
 
-        // تحديد نطاق الوقت للفلترة
         if (mode === 'day') {
             const v = document.getElementById('date-val')?.value;
             if(v){ start = new Date(v+'T00:00:00'); end = new Date(v+'T23:59:59'); }
@@ -173,7 +233,7 @@ window.onload = async () => {
             if(v){ const p = v.split('-'); start = new Date(p[0], p[1]-1, 1); end = new Date(p[0], p[1], 0, 23, 59, 59); }
         } else if (mode === 'year') {
             const v = document.getElementById('year-val')?.value;
-            start = new Date(v, 0, 1); end = new Date(v, 11, 31, 23, 59, 59);
+            if(v){ start = new Date(v, 0, 1); end = new Date(v, 11, 31, 23, 59, 59); }
         }
 
         if (start && end) {
@@ -186,19 +246,21 @@ window.onload = async () => {
             if (snap.empty) showNotice("لا توجد سجلات تطابق البحث المختار.");
             lastFetchedRecords = [];
             snap.forEach(doc => lastFetchedRecords.push(doc.data()));
+            
+            // تشغيل الرادار فوراً عند جلب البيانات
+            checkViolations(lastFetchedRecords);
+            
             processAndRender(lastFetchedRecords);
         } catch (err) { showNotice("حدث خطأ أثناء جلب البيانات."); }
         document.getElementById('loader').classList.add('hidden');
     };
 
-    // البحث اللحظي مع التظليل
     document.getElementById('table-search').addEventListener('input', function() {
         const term = this.value.toLowerCase();
         document.querySelectorAll('#table-body tr').forEach(row => {
             const cells = Array.from(row.cells);
             const match = cells.some(cell => (cell.getAttribute('data-orig') || cell.innerText).toLowerCase().includes(term));
             row.style.display = match ? "" : "none";
-            
             if (match && term) {
                 cells.forEach(cell => {
                     const txt = cell.getAttribute('data-orig') || cell.innerText;
@@ -211,7 +273,6 @@ window.onload = async () => {
         });
     });
 
-    // التصدير
     document.getElementById('export-excel').onclick = () => {
         if (!lastFetchedRecords.length) return showNotice("لا توجد بيانات لتصديرها.");
         const wb = XLSX.utils.table_to_book(document.getElementById('reports-table'));
@@ -226,6 +287,8 @@ window.onload = async () => {
         setTimeout(() => document.title = oldTitle, 1000);
     };
 };
+
+// --- 6. معالجة ورسم الجدول ---
 
 function processAndRender(records) {
     const accF = document.getElementById('account-filter').value;
@@ -257,13 +320,11 @@ function processAndRender(records) {
 function renderUI(summary, groupKey, totalT, totalM) {
     const tableBody = document.getElementById('table-body');
     const maxTime = Math.max(...Object.values(summary).map(s => s.time), 0);
-    
     let html = '', topName = "-", topVal = -1;
 
     Object.keys(summary).sort().forEach(k => {
         const time = summary[k].time;
         if(time > topVal) { topVal = time; topName = k; }
-        
         const sClass = getFlexibleStatusClass(time, maxTime);
         html += `<tr class="${sClass}">
             <td data-orig="${k}">${k}</td>
