@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Pro | لوحة التقارير الذكية</title>
+    
+    <link rel="stylesheet" href="style.css">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body class="light-mode"> <div class="app-container">
+        
+        <header class="glass-header">
+            <div class="logo-area">
+                <i class="fas fa-chart-line-pie"></i>
+                <h1>لوحة التقارير المتقدمة</h1>
+            </div>
+            <button id="theme-toggle" class="theme-btn">
+                <i class="fas fa-moon"></i>
+            </button>
+        </header>
+
+        <main>
+            <section class="filter-section glass-card">
+                <div class="section-title">
+                    <i class="fas fa-filter"></i>
+                    <span>خيارات التصفية الذكية</span>
+                </div>
+
+                <div class="filter-grid">
+                    <div class="filter-group">
+                        <label>نطاق التاريخ</label>
+                        <select id="date-type">
+                            <option value="all">كل التواريخ</option>
+                            <option value="day">يوم محدد</option>
+                            <option value="month">شهر محدد</option>
+                            <option value="year">سنة كاملة</option>
+                            <option value="range">نطاق مخصص (من - إلى)</option>
+                        </select>
+                    </div>
+
+                    <div id="dynamic-date-container" class="filter-group hidden">
+                        </div>
+
+                    <div class="filter-group">
+                        <label>الحساب</label>
+                        <select id="account-filter">
+                            <option value="all">كل الحسابات</option>
+                            </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>الموظف</label>
+                        <select id="user-filter">
+                            <option value="all">كل المستخدمين</option>
+                            </select>
+                    </div>
+                </div>
+
+                <button id="apply-filters-btn" class="primary-btn">
+                    <span>تطبيق التصفية</span>
+                    <i class="fas fa-magic"></i>
+                </button>
+            </section>
+
+            <section id="stats-container" class="stats-grid hidden">
+                <div class="stat-card glass-card">
+                    <i class="fas fa-clock text-blue"></i>
+                    <div class="stat-info">
+                        <span class="stat-label">إجمالي الوقت</span>
+                        <h3 id="stat-total-time">0h 0m</h3>
+                    </div>
+                </div>
+                <div class="stat-card glass-card">
+                    <i class="fas fa-money-bill-wave text-green"></i>
+                    <div class="stat-info">
+                        <span class="stat-label">إجمالي التكلفة</span>
+                        <h3 id="stat-total-money">0.00 ج.م</h3>
+                    </div>
+                </div>
+                <div class="stat-card glass-card">
+                    <i class="fas fa-user-tie text-purple"></i>
+                    <div class="stat-info">
+                        <span class="stat-label">الأكثر إنتاجية</span>
+                        <h3 id="stat-top-user">-</h3>
+                    </div>
+                </div>
+            </section>
+
+            <section id="results-section" class="results-section glass-card hidden">
+                <div class="results-header">
+                    <h3>نتائج التقرير</h3>
+                    <div class="export-btns">
+                        <button id="export-excel" title="تصدير إكسيل"><i class="fas fa-file-excel"></i></button>
+                        <button id="export-pdf" title="تصدير PDF"><i class="fas fa-file-pdf"></i></button>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table id="reports-table">
+                        <thead>
+                            <tr id="table-head-row">
+                                </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            </tbody>
+                        <tfoot>
+                            <tr class="grand-total-row">
+                                <td id="total-label-cell">الإجمالي الكلي بالفترة</td>
+                                <td id="footer-total-time">0h 0m</td>
+                                <td id="footer-total-money">0.00 ج.م</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </section>
+
+            <div id="loader" class="loader-container hidden">
+                <div class="spinner"></div>
+                <p>جاري سحب البيانات من السحابة...</p>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
