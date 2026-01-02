@@ -11,35 +11,34 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// 2. متغيرات الحالة والمتعلقات
+// متغيرات الحالة
 let accountsData = {};
-let usersData = [];
-let userRates = {}; // لتخزين الأسعار الخاصة من مجموعة userAccountRates
-
-// 3. عناصر الواجهة
+let userRates = {};
 const dateType = document.getElementById('date-type');
 const dynamicDateContainer = document.getElementById('dynamic-date-container');
-const themeToggle = document.getElementById('theme-toggle');
 const tableBody = document.getElementById('table-body');
 const tableHeadRow = document.getElementById('table-head-row');
 
-// --- أولاً: إدارة المظهر (Dark Mode) ---
-themeToggle.addEventListener('click', () => {
-    document.body.classList.toggle('dark-mode');
-    const isDark = document.body.classList.contains('dark-mode');
-    themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-});
+// --- تنسيق الوقت (ساعة:دقيقة:ثانية) ---
+function formatTime(totalMinutes) {
+    if (!totalMinutes || totalMinutes <= 0) return "0س 0د 0ث";
+    const totalSeconds = Math.floor(totalMinutes * 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours}س ${minutes}د ${seconds}ث`;
+}
 
-// استعادة المظهر المفضل
-if(localStorage.getItem('theme') === 'dark') document.body.classList.add('dark-mode');
+// --- التقريب لأقرب 10 جنيهات ---
+function roundToTen(amount) {
+    return Math.round(amount / 10) * 10;
+}
 
-// --- ثانياً: إدارة حقول التاريخ الديناميكية ---
+// --- إدارة التواريخ الديناميكية ---
 dateType.addEventListener('change', () => {
     const val = dateType.value;
     dynamicDateContainer.classList.remove('hidden');
     let html = '';
-
     if (val === 'day') html = '<label>اختر اليوم</label><input type="date" id="date-val">';
     else if (val === 'month') html = '<label>اختر الشهر</label><input type="month" id="month-val">';
     else if (val === 'year') {
@@ -49,29 +48,23 @@ dateType.addEventListener('change', () => {
     }
     else if (val === 'range') {
         html = '<label>من</label><input type="date" id="date-start"><label>إلى</label><input type="date" id="date-end">';
-    } else {
-        dynamicDateContainer.classList.add('hidden');
-    }
+    } else { dynamicDateContainer.classList.add('hidden'); }
     dynamicDateContainer.innerHTML = html;
 });
 
-// --- ثالثاً: جلب البيانات الأساسية (Accounts, Users, Rates) ---
+// --- جلب البيانات الأساسية عند التشغيل ---
 async function init() {
-    // جلب الحسابات
     const accSnap = await db.collection('accounts').get();
     accSnap.forEach(doc => {
         accountsData[doc.id] = doc.data();
         document.getElementById('account-filter').innerHTML += `<option value="${doc.id}">${doc.data().name}</option>`;
     });
 
-    // جلب الموظفين
     const userSnap = await db.collection('users').where('role', '==', 'user').get();
     userSnap.forEach(doc => {
-        usersData.push({id: doc.id, ...doc.data()});
         document.getElementById('user-filter').innerHTML += `<option value="${doc.data().name}">${doc.data().name}</option>`;
     });
 
-    // جلب الأسعار الخاصة (User Account Rates)
     const rateSnap = await db.collection('userAccountRates').get();
     rateSnap.forEach(doc => {
         const data = doc.data();
@@ -79,27 +72,46 @@ async function init() {
     });
 }
 
-// --- رابعاً: منطق الفلترة والحساب (The Core Engine) ---
+// --- المحرك الرئيسي لجلب البيانات وتصفيتها ---
 document.getElementById('apply-filters-btn').addEventListener('click', async () => {
     showLoader(true);
-    
     let query = db.collection('workRecords');
+    
     const accFilter = document.getElementById('account-filter').value;
     const userFilter = document.getElementById('user-filter').value;
-
-    // تطبيق فلاتر الحساب والموظف
     if(accFilter !== 'all') query = query.where('accountId', '==', accFilter);
     if(userFilter !== 'all') query = query.where('userName', '==', userFilter);
 
-    // تطبيق فلتر التاريخ (Timestamp logic)
-    // ملاحظة: هنا يجب تحويل التاريخ لـ Timestamp حسب المدخلات
-    // سأقوم بتبسيطها هنا لتوضيح المنطق
-    
-    const snapshot = await query.get();
-    let records = [];
-    snapshot.forEach(doc => records.push(doc.data()));
+    // حصر التاريخ بدقة
+    const mode = dateType.value;
+    if (mode === 'month') {
+        const monthVal = document.getElementById('month-val').value;
+        if (monthVal) {
+            const start = new Date(monthVal + '-01T00:00:00');
+            const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59);
+            query = query.where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(start))
+                         .where('timestamp', '<=', firebase.firestore.Timestamp.fromDate(end));
+        }
+    } else if (mode === 'day') {
+        const dayVal = document.getElementById('date-val').value;
+        if (dayVal) {
+            const start = new Date(dayVal + 'T00:00:00');
+            const end = new Date(dayVal + 'T23:59:59');
+            query = query.where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(start))
+                         .where('timestamp', '<=', firebase.firestore.Timestamp.fromDate(end));
+        }
+    }
 
-    processAndRender(records, accFilter, userFilter);
+    try {
+        const snapshot = await query.orderBy('timestamp', 'desc').get();
+        let records = [];
+        snapshot.forEach(doc => records.push(doc.data()));
+        processAndRender(records, accFilter, userFilter);
+    } catch (error) {
+        console.error("Index required or Query Error: ", error);
+        alert("تأكد من إنشاء المؤشرات (Indexes) في Firebase إذا طلب منك ذلك في الـ Console.");
+        showLoader(false);
+    }
 });
 
 function processAndRender(records, accFilter, userFilter) {
@@ -107,26 +119,19 @@ function processAndRender(records, accFilter, userFilter) {
     let totalTimeAll = 0;
     let totalMoneyAll = 0;
 
-    // تحديد نوع التجميع (Aggregation Mode)
-    let mode = 'date'; // الافتراضي تجميع حسب التاريخ
+    let groupMode = 'date';
     let headName = 'التاريخ';
-
-    if (userFilter !== 'all' && accFilter === 'all') {
-        mode = 'accountId'; headName = 'الحسابات';
-    } else if (accFilter !== 'all' && userFilter === 'all') {
-        mode = 'userName'; headName = 'الموظفين';
-    }
+    if (userFilter !== 'all' && accFilter === 'all') { groupMode = 'accountId'; headName = 'الحسابات'; }
+    else if (accFilter !== 'all' && userFilter === 'all') { groupMode = 'userName'; headName = 'الموظفين'; }
 
     records.forEach(rec => {
-        let key = (mode === 'accountId') ? accountsData[rec.accountId]?.name : (mode === 'userName' ? rec.userName : new Date(rec.timestamp.seconds * 1000).toLocaleDateString('ar-EG'));
+        let key = (groupMode === 'accountId') ? (accountsData[rec.accountId]?.name || 'غير معروف') : 
+                  (groupMode === 'userName' ? rec.userName : new Date(rec.timestamp.seconds * 1000).toLocaleDateString('ar-EG'));
         
         if(!summary[key]) summary[key] = { time: 0, money: 0 };
 
-        // حساب السعر: خاص أم افتراضي؟
         const customRate = userRates[`${rec.userId}_${rec.accountId}`];
-        const defaultRate = accountsData[rec.accountId]?.defaultPricePerHour || 0;
-        const finalRate = customRate || defaultRate;
-
+        const finalRate = customRate || accountsData[rec.accountId]?.defaultPricePerHour || 0;
         const recordMoney = (rec.totalTime / 60) * finalRate;
 
         summary[key].time += rec.totalTime;
@@ -139,40 +144,30 @@ function processAndRender(records, accFilter, userFilter) {
 }
 
 function renderTable(summary, headName, totalT, totalM) {
-    tableHeadRow.innerHTML = `<th>${headName}</th><th>إجمالي الوقت</th><th>الرواتب / التكلفة</th>`;
+    tableHeadRow.innerHTML = `<th>${headName}</th><th>إجمالي الوقت</th><th>الرواتب (مقربة)</th>`;
     tableBody.innerHTML = '';
 
     Object.keys(summary).forEach(key => {
-        const row = `<tr>
+        const rowMoney = roundToTen(summary[key].money);
+        tableBody.innerHTML += `<tr>
             <td>${key}</td>
-            <td>${Math.floor(summary[key].time / 60)}h ${summary[key].time % 60}m</td>
-            <td>${summary[key].money.toFixed(2)} ج.م</td>
+            <td>${formatTime(summary[key].time)}</td>
+            <td>${rowMoney.toLocaleString()} ج.م</td>
         </tr>`;
-        tableBody.innerHTML += row;
     });
 
-    // تحديث الإجماليات وكروت الإحصائيات
-    document.getElementById('footer-total-time').innerText = `${Math.floor(totalT / 60)}h ${totalT % 60}m`;
-    document.getElementById('footer-total-money').innerText = `${totalM.toFixed(2)} ج.م`;
-    document.getElementById('stat-total-time').innerText = `${Math.floor(totalT / 60)}h ${totalT % 60}m`;
-    document.getElementById('stat-total-money').innerText = `${totalM.toFixed(2)} ج.م`;
+    const finalTotalMoney = roundToTen(totalM);
+    document.getElementById('footer-total-time').innerText = formatTime(totalT);
+    document.getElementById('footer-total-money').innerText = `${finalTotalMoney.toLocaleString()} ج.م`;
     
+    document.getElementById('stat-total-time').innerText = formatTime(totalT);
+    document.getElementById('stat-total-money').innerText = `${finalTotalMoney.toLocaleString()} ج.م`;
+
     document.getElementById('results-section').classList.remove('hidden');
     document.getElementById('stats-container').classList.remove('hidden');
     showLoader(false);
-
-    // إضافة أنيميشن بسيط باستخدام GSAP
     gsap.from("#reports-table tr", {opacity: 0, y: 10, stagger: 0.05});
 }
 
-function showLoader(show) {
-    document.getElementById('loader').classList.toggle('hidden', !show);
-}
-
+function showLoader(show) { document.getElementById('loader').classList.toggle('hidden', !show); }
 init();
-
-document.getElementById('export-excel').addEventListener('click', () => {
-    const table = document.getElementById('reports-table');
-    const wb = XLSX.utils.table_to_book(table, {sheet: "تقرير الإنتاجية"});
-    XLSX.writeFile(wb, `تقرير_${new Date().toLocaleDateString()}.xlsx`);
-});
