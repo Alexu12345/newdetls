@@ -242,7 +242,8 @@ td {
     .export-btns, 
     #theme-toggle,
     .primary-btn,
-    .stats-grid {
+    .stats-grid,
+    .search-container {
         display: none !important;
     }
 
@@ -312,3 +313,4 @@ td {
     border: 1px solid var(--border-color);
     color: var(--text-main);
 }
+
