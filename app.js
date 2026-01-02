@@ -8,39 +8,17 @@ const firebaseConfig = {
     appId: "1:246595598451:web:c6842f1618dffe765a5206"
 };
 
+// تهيئة Firebase
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.firestore();
 
-// 2. تعريف العناصر من الـ HTML
-const themeToggle = document.getElementById('theme-toggle');
-const dateType = document.getElementById('date-type');
-const dynamicDateContainer = document.getElementById('dynamic-date-container');
-const tableBody = document.getElementById('table-body');
-const tableHeadRow = document.getElementById('table-head-row');
-const applyBtn = document.getElementById('apply-filters-btn');
-const exportExcelBtn = document.getElementById('export-excel');
-const exportPdfBtn = document.getElementById('export-pdf');
-
-// 3. متغيرات البيانات
+// 2. المتغيرات العامة
 let accountsData = {};
 let userRates = {};
 
-// --- وظيفة الدارك مود (تم التأكد من الربط) ---
-themeToggle.addEventListener('click', () => {
-    document.body.classList.toggle('dark-mode');
-    const isDark = document.body.classList.contains('dark-mode');
-    themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-});
-
-if (localStorage.getItem('theme') === 'dark') {
-    document.body.classList.add('dark-mode');
-    themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
-}
-
-// --- تنسيق الوقت (ساعة:دقيقة:ثانية) ---
+// 3. الدوال المساعدة (الوقت والمال)
 function formatTime(totalMinutes) {
     if (!totalMinutes || totalMinutes <= 0) return "0س 0د 0ث";
     const totalSeconds = Math.floor(totalMinutes * 60);
@@ -50,41 +28,27 @@ function formatTime(totalMinutes) {
     return `${hours}س ${minutes}د ${seconds}ث`;
 }
 
-// --- التقريب لأقرب 10 جنيهات ---
 function roundToTen(amount) {
     return Math.round(amount / 10) * 10;
 }
 
-// --- إدارة حقول التاريخ ---
-dateType.addEventListener('change', () => {
-    const val = dateType.value;
-    dynamicDateContainer.classList.remove('hidden');
-    let html = '';
-    if (val === 'day') html = '<label>اختر اليوم</label><input type="date" id="date-val">';
-    else if (val === 'month') html = '<label>اختر الشهر</label><input type="month" id="month-val">';
-    else if (val === 'year') {
-        html = '<label>اختر السنة</label><select id="year-val">';
-        for(let i=2024; i<=2026; i++) html += `<option value="${i}">${i}</option>`;
-        html += '</select>';
-    } else if (val === 'range') {
-        html = '<label>من</label><input type="date" id="date-start"><label>إلى</label><input type="date" id="date-end">';
-    } else { dynamicDateContainer.classList.add('hidden'); }
-    dynamicDateContainer.innerHTML = html;
-});
+// 4. دالة التشغيل الرئيسية عند تحميل الصفحة
+window.onload = async () => {
+    // --- أ. تفعيل الدارك مود ---
+    const themeToggle = document.getElementById('theme-toggle');
+    const applyTheme = (isDark) => {
+        document.body.classList.toggle('dark-mode', isDark);
+        themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    };
 
-// --- تصدير Excel و PDF ---
-exportExcelBtn.addEventListener('click', () => {
-    const table = document.getElementById('reports-table');
-    const wb = XLSX.utils.table_to_book(table, {sheet: "تقرير"});
-    XLSX.writeFile(wb, `Report_${new Date().getTime()}.xlsx`);
-});
+    themeToggle.addEventListener('click', () => {
+        const isDark = !document.body.classList.contains('dark-mode');
+        applyTheme(isDark);
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    });
+    if (localStorage.getItem('theme') === 'dark') applyTheme(true);
 
-exportPdfBtn.addEventListener('click', () => {
-    window.print(); // أسهل وأدق طريقة للـ PDF حالياً للحفاظ على ستايل الجدول
-});
-
-// --- جلب البيانات الأساسية ---
-async function init() {
+    // --- ب. جلب بيانات الحسابات والمستخدمين ---
     const accSnap = await db.collection('accounts').get();
     accSnap.forEach(doc => {
         accountsData[doc.id] = doc.data();
@@ -101,74 +65,97 @@ async function init() {
         const data = doc.data();
         userRates[`${data.userId}_${data.accountId}`] = data.customPricePerHour;
     });
-}
 
-// --- جلب البيانات عند الضغط على زر التصفية ---
-applyBtn.addEventListener('click', async () => {
-    document.getElementById('loader').classList.remove('hidden');
-    let query = db.collection('workRecords');
-    
-    const accFilter = document.getElementById('account-filter').value;
-    const userFilter = document.getElementById('user-filter').value;
-    if(accFilter !== 'all') query = query.where('accountId', '==', accFilter);
-    if(userFilter !== 'all') query = query.where('userName', '==', userFilter);
+    // --- ج. التحكم في حقول التاريخ ---
+    const dateType = document.getElementById('date-type');
+    const dynamicContainer = document.getElementById('dynamic-date-container');
 
-    // فلتر التاريخ
-    const mode = dateType.value;
-    if (mode === 'month') {
-        const monthVal = document.getElementById('month-val').value;
-        if (monthVal) {
-            const start = new Date(monthVal + '-01T00:00:00');
-            const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59);
+    dateType.addEventListener('change', () => {
+        const val = dateType.value;
+        dynamicContainer.classList.remove('hidden');
+        if (val === 'day') dynamicContainer.innerHTML = '<label>اختر اليوم</label><input type="date" id="date-val">';
+        else if (val === 'month') dynamicContainer.innerHTML = '<label>اختر الشهر</label><input type="month" id="month-val">';
+        else if (val === 'year') {
+            let options = '';
+            for(let i=2024; i<=2026; i++) options += `<option value="${i}">${i}</option>`;
+            dynamicContainer.innerHTML = `<label>السنة</label><select id="year-val">${options}</select>`;
+        } else if (val === 'range') {
+            dynamicContainer.innerHTML = '<label>من</label><input type="date" id="date-start"><label>إلى</label><input type="date" id="date-end">';
+        } else dynamicContainer.classList.add('hidden');
+    });
+
+    // --- د. تنفيذ التصفية (المنطق البرمجي السليم) ---
+    document.getElementById('apply-filters-btn').addEventListener('click', async () => {
+        document.getElementById('loader').classList.remove('hidden');
+        let query = db.collection('workRecords');
+
+        const accFilter = document.getElementById('account-filter').value;
+        const userFilter = document.getElementById('user-filter').value;
+        if(accFilter !== 'all') query = query.where('accountId', '==', accFilter);
+        if(userFilter !== 'all') query = query.where('userName', '==', userFilter);
+
+        // فلترة التاريخ بدقة
+        const mode = dateType.value;
+        if (mode === 'month' && document.getElementById('month-val').value) {
+            const dateParts = document.getElementById('month-val').value.split('-');
+            const start = new Date(dateParts[0], dateParts[1] - 1, 1);
+            const end = new Date(dateParts[0], dateParts[1], 0, 23, 59, 59);
             query = query.where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(start))
                          .where('timestamp', '<=', firebase.firestore.Timestamp.fromDate(end));
         }
-    }
 
-    try {
-        const snapshot = await query.get();
-        let records = [];
-        snapshot.forEach(doc => records.push(doc.data()));
-        
-        let summary = {};
-        let totalT = 0, totalM = 0;
-        
-        // تحديد وضع التجميع
-        let headName = 'التاريخ';
-        let groupMode = 'date';
-        if (userFilter !== 'all' && accFilter === 'all') { groupMode = 'accountId'; headName = 'الحساب'; }
-        else if (accFilter !== 'all' && userFilter === 'all') { groupMode = 'userName'; headName = 'الموظف'; }
+        try {
+            const snapshot = await query.get();
+            let summary = {};
+            let totalT = 0, totalM = 0;
 
-        records.forEach(rec => {
-            let key = (groupMode === 'accountId') ? (accountsData[rec.accountId]?.name || 'حساب محذوف') : 
-                      (groupMode === 'userName' ? rec.userName : new Date(rec.timestamp.seconds * 1000).toLocaleDateString('ar-EG'));
-            
-            if(!summary[key]) summary[key] = { time: 0, money: 0 };
-            
-            const rate = userRates[`${rec.userId}_${rec.accountId}`] || accountsData[rec.accountId]?.defaultPricePerHour || 0;
-            const money = (rec.totalTime / 60) * rate;
+            let groupKey = (userFilter !== 'all' && accFilter === 'all') ? 'accountId' : 
+                           (accFilter !== 'all' && userFilter === 'all' ? 'userName' : 'date');
 
-            summary[key].time += rec.totalTime;
-            summary[key].money += money;
-            totalT += rec.totalTime;
-            totalM += money;
-        });
+            snapshot.forEach(doc => {
+                const rec = doc.data();
+                let key = groupKey === 'accountId' ? (accountsData[rec.accountId]?.name || 'حساب غير معروف') :
+                          (groupKey === 'userName' ? rec.userName : new Date(rec.timestamp.seconds * 1000).toLocaleDateString('ar-EG'));
 
-        renderTable(summary, headName, totalT, totalM);
-    } catch (e) { console.error(e); }
-});
+                if (!summary[key]) summary[key] = { time: 0, money: 0 };
+                
+                const rate = userRates[`${rec.userId}_${rec.accountId}`] || accountsData[rec.accountId]?.defaultPricePerHour || 0;
+                const money = (rec.totalTime / 60) * rate;
 
-function renderTable(summary, headName, totalT, totalM) {
-    tableHeadRow.innerHTML = `<th>${headName}</th><th>إجمالي الوقت</th><th>التكلفة (مقربة)</th>`;
-    tableBody.innerHTML = '';
+                summary[key].time += rec.totalTime;
+                summary[key].money += money;
+                totalT += rec.totalTime;
+                totalM += money;
+            });
+
+            renderTable(summary, groupKey, totalT, totalM);
+        } catch (e) { console.error("Query Error:", e); }
+        document.getElementById('loader').classList.add('hidden');
+    });
+
+    // --- هـ. زراير التصدير (المعدلة) ---
+    document.getElementById('export-excel').onclick = () => {
+        if (typeof XLSX === 'undefined') return alert("جاري تحميل المكتبة، حاول ثانية");
+        const wb = XLSX.utils.table_to_book(document.getElementById('reports-table'));
+        XLSX.writeFile(wb, `Report_${new Date().getTime()}.xlsx`);
+    };
+
+    document.getElementById('export-pdf').onclick = () => window.print();
+};
+
+function renderTable(summary, groupKey, totalT, totalM) {
+    const headText = groupKey === 'accountId' ? 'الحساب' : (groupKey === 'userName' ? 'الموظف' : 'التاريخ');
+    document.getElementById('table-head-row').innerHTML = `<th>${headText}</th><th>إجمالي الوقت</th><th>التكلفة (مقربة)</th>`;
     
+    let html = '';
     Object.keys(summary).forEach(key => {
-        tableBody.innerHTML += `<tr>
+        html += `<tr>
             <td>${key}</td>
             <td>${formatTime(summary[key].time)}</td>
             <td>${roundToTen(summary[key].money).toLocaleString()} ج.م</td>
         </tr>`;
     });
+    document.getElementById('table-body').innerHTML = html;
 
     document.getElementById('footer-total-time').innerText = formatTime(totalT);
     document.getElementById('footer-total-money').innerText = `${roundToTen(totalM).toLocaleString()} ج.م`;
@@ -177,8 +164,5 @@ function renderTable(summary, headName, totalT, totalM) {
 
     document.getElementById('results-section').classList.remove('hidden');
     document.getElementById('stats-container').classList.remove('hidden');
-    document.getElementById('loader').classList.add('hidden');
-    gsap.from("#reports-table tr", {opacity: 0, x: -20, stagger: 0.05});
+    gsap.from("#reports-table tr", {opacity: 0, y: 15, stagger: 0.05});
 }
-
-init();
