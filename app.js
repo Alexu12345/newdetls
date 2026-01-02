@@ -11,12 +11,13 @@ const firebaseConfig = {
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// 2. المتغيرات العامة وخزان البيانات
+// 2. المتغيرات العامة
 let accountsData = {};
 let userRates = {};
-let lastFetchedRecords = []; // الخزان المحلي (Cache)
+let lastFetchedRecords = []; 
+let currentViewMode = 'date'; // الوضع الافتراضي للسويتش
 
-// 3. الدوال المساعدة (تنسيق، تقريب، ألوان)
+// 3. الدوال المساعدة
 const formatTime = (totalMinutes) => {
     if (!totalMinutes || totalMinutes <= 0) return "0س 0د 0ث";
     const totalSeconds = Math.floor(totalMinutes * 60);
@@ -28,7 +29,6 @@ const formatTime = (totalMinutes) => {
 
 const roundToTen = (amount) => Math.round(amount / 10) * 10;
 
-// تحديد كلاس اللون بناءً على عدد الساعات
 function getStatusClass(totalMinutes) {
     const hours = totalMinutes / 60;
     if (hours >= 150) return 'row-gold';
@@ -37,31 +37,46 @@ function getStatusClass(totalMinutes) {
     return 'row-red';
 }
 
-// توليد اسم الملف الذكي للتصدير
 function getDynamicFileName() {
     const userF = document.getElementById('user-filter');
     const accF = document.getElementById('account-filter');
     const dateM = document.getElementById('date-type').value;
     let parts = [];
-
     if (userF.value !== 'all') parts.push(userF.value);
     if (accF.value !== 'all') parts.push(accF.options[accF.selectedIndex].text);
-
     if (dateM === 'day') parts.push(document.getElementById('date-val')?.value || "");
     else if (dateM === 'month') {
         const mVal = document.getElementById('month-val')?.value;
         if(mVal) parts.push(new Date(mVal).toLocaleDateString('ar-EG', {month:'long', year:'numeric'}));
     }
-    else if (dateM === 'year') parts.push(document.getElementById('year-val')?.value || "");
-    else if (dateM === 'range') parts.push(`${document.getElementById('date-start')?.value}_إلى_${document.getElementById('date-end')?.value}`);
-
     return parts.length ? parts.join(' - ') : "تقرير_عام";
 }
 
-// 4. المحرك الرئيسي عند تحميل الصفحة
+// 4. المحرك الرئيسي
 window.onload = async () => {
-    // --- تفعيل الدارك مود ---
     const themeToggle = document.getElementById('theme-toggle');
+    const dateType = document.getElementById('date-type');
+    const dynamicDateContainer = document.getElementById('dynamic-date-container');
+    const viewSwitch = document.getElementById('view-switch-container');
+
+    // --- التبديل بين الأوضاع (Pivot Logic) ---
+    document.getElementById('view-days').onclick = function() {
+        updateSwitchUI(this);
+        currentViewMode = 'date';
+        processAndRender(lastFetchedRecords, 'all', 'all');
+    };
+    document.getElementById('view-users').onclick = function() {
+        updateSwitchUI(this);
+        currentViewMode = 'userName';
+        processAndRender(lastFetchedRecords, 'all', 'all');
+    };
+
+    function updateSwitchUI(btn) {
+        document.querySelectorAll('.switch-button button').forEach(b => b.classList.remove('active-switch'));
+        btn.classList.add('active-switch');
+    }
+
+    // --- الدارك مود ---
     const toggleTheme = (isDark) => {
         document.body.classList.toggle('dark-mode', isDark);
         themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
@@ -73,12 +88,11 @@ window.onload = async () => {
     };
     if (localStorage.getItem('theme') === 'dark') toggleTheme(true);
 
-    // --- جلب البيانات الأساسية (Accounts & Rates) ---
+    // --- جلب البيانات الأساسية ---
     const [accs, rates] = await Promise.all([
         db.collection('accounts').get(),
         db.collection('userAccountRates').get()
     ]);
-    
     accs.forEach(doc => {
         accountsData[doc.id] = doc.data();
         document.getElementById('account-filter').innerHTML += `<option value="${doc.id}">${doc.data().name}</option>`;
@@ -93,9 +107,7 @@ window.onload = async () => {
         document.getElementById('user-filter').innerHTML += `<option value="${doc.data().name}">${doc.data().name}</option>`;
     });
 
-    // --- تبديل حقول التاريخ ---
-    const dateType = document.getElementById('date-type');
-    const dynamicDateContainer = document.getElementById('dynamic-date-container');
+    // --- حقول التاريخ ---
     dateType.onchange = () => {
         const val = dateType.value;
         dynamicDateContainer.classList.remove('hidden');
@@ -104,15 +116,13 @@ window.onload = async () => {
         else if (val === 'year') {
             let opts = ''; for(let i=2024; i<=2026; i++) opts += `<option value="${i}">${i}</option>`;
             dynamicDateContainer.innerHTML = `<label>السنة</label><select id="year-val">${opts}</select>`;
-        }
-        else if (val === 'range') dynamicDateContainer.innerHTML = '<label>من</label><input type="date" id="date-start"><label>إلى</label><input type="date" id="date-end">';
+        } else if (val === 'range') dynamicDateContainer.innerHTML = '<label>من</label><input type="date" id="date-start"><label>إلى</label><input type="date" id="date-end">';
         else dynamicDateContainer.classList.add('hidden');
     };
 
-    // --- تنفيذ التصفية والبحث ---
+    // --- زر التصفية الرئيسي ---
     document.getElementById('apply-filters-btn').onclick = async () => {
         document.getElementById('loader').classList.remove('hidden');
-        
         let query = db.collection('workRecords');
         const accF = document.getElementById('account-filter').value;
         const userF = document.getElementById('user-filter').value;
@@ -120,7 +130,10 @@ window.onload = async () => {
         if(accF !== 'all') query = query.where('accountId', '==', accF);
         if(userF !== 'all') query = query.where('userName', '==', userF);
 
-        // منطق التاريخ الشامل
+        // إظهار/إخفاء السويتش
+        if (accF === 'all' && userF === 'all') viewSwitch.classList.remove('hidden');
+        else viewSwitch.classList.add('hidden');
+
         const mode = dateType.value;
         let start, end;
         if (mode === 'day') {
@@ -156,51 +169,44 @@ window.onload = async () => {
         document.getElementById('loader').classList.add('hidden');
     };
 
-    // --- البحث السريع مع التظليل ---
+    // --- البحث السريع ---
     document.getElementById('table-search').addEventListener('input', function() {
         const term = this.value.toLowerCase();
         const rows = document.querySelectorAll('#table-body tr');
-
         rows.forEach(row => {
             const cells = Array.from(row.cells);
-            const match = cells.some(cell => cell.getAttribute('data-orig')?.toLowerCase().includes(term) || cell.innerText.toLowerCase().includes(term));
-            
+            const match = cells.some(cell => (cell.getAttribute('data-orig') || cell.innerText).toLowerCase().includes(term));
             row.style.display = match ? "" : "none";
-            
             if (match && term) {
                 cells.forEach(cell => {
-                    const originalText = cell.getAttribute('data-orig') || cell.innerText;
-                    if (!cell.getAttribute('data-orig')) cell.setAttribute('data-orig', originalText);
-                    
-                    const regex = new RegExp(`(${term})`, 'gi');
-                    cell.innerHTML = originalText.replace(regex, '<span class="highlight">$1</span>');
+                    const txt = cell.getAttribute('data-orig') || cell.innerText;
+                    if(!cell.getAttribute('data-orig')) cell.setAttribute('data-orig', txt);
+                    cell.innerHTML = txt.replace(new RegExp(`(${term})`, 'gi'), '<span class="highlight">$1</span>');
                 });
             } else {
-                cells.forEach(cell => {
-                    if (cell.getAttribute('data-orig')) cell.innerHTML = cell.getAttribute('data-orig');
-                });
+                cells.forEach(cell => { if(cell.getAttribute('data-orig')) cell.innerHTML = cell.getAttribute('data-orig'); });
             }
         });
     });
 
-    // --- أزرار التصدير ---
+    // --- التصدير ---
     document.getElementById('export-excel').onclick = () => {
-        const wb = XLSX.utils.table_to_book(document.getElementById('reports-table'));
-        XLSX.writeFile(wb, `${getDynamicFileName()}.xlsx`);
+        XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById('reports-table')), `${getDynamicFileName()}.xlsx`);
     };
     document.getElementById('export-pdf').onclick = () => {
-        const oldTitle = document.title;
-        document.title = getDynamicFileName();
+        const old = document.title; document.title = getDynamicFileName();
         window.print();
-        setTimeout(() => document.title = oldTitle, 1000);
+        setTimeout(() => document.title = old, 1000);
     };
 };
 
-// 5. معالجة ورسم البيانات
 function processAndRender(records, accF, userF) {
     let summary = {}, totalT = 0, totalM = 0;
-    let groupKey = (userF !== 'all' && accF === 'all') ? 'accountId' : 
-                   (accF !== 'all' && userF === 'all' ? 'userName' : 'date');
+    
+    // Pivot Logic Selection
+    let groupKey;
+    if (accF === 'all' && userF === 'all') groupKey = currentViewMode;
+    else groupKey = (userF !== 'all' && accF === 'all') ? 'accountId' : (accF !== 'all' && userF === 'all' ? 'userName' : 'date');
 
     records.forEach(rec => {
         let key = groupKey === 'accountId' ? (accountsData[rec.accountId]?.name || 'حساب غير معروف') :
@@ -225,8 +231,8 @@ function renderUI(summary, groupKey, totalT, totalM) {
     
     let html = '';
     Object.keys(summary).forEach(k => {
-        const statusClass = getStatusClass(summary[k].time);
-        html += `<tr class="${statusClass}">
+        const sClass = getStatusClass(summary[k].time);
+        html += `<tr class="${sClass}">
             <td data-orig="${k}">${k}</td>
             <td data-orig="${formatTime(summary[k].time)}">${formatTime(summary[k].time)}</td>
             <td data-orig="${roundToTen(summary[k].money).toLocaleString()} ج.م">${roundToTen(summary[k].money).toLocaleString()} ج.م</td>
@@ -239,11 +245,9 @@ function renderUI(summary, groupKey, totalT, totalM) {
     document.getElementById('stat-total-time').innerText = formatTime(totalT);
     document.getElementById('stat-total-money').innerText = `${roundToTen(totalM).toLocaleString()} ج.م`;
 
-    // إظهار النتائج والأنيميشن
     document.getElementById('results-section').classList.remove('hidden');
     document.getElementById('stats-container').classList.remove('hidden');
 
-    const tl = gsap.timeline();
-    tl.fromTo(".stat-card", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: "back.out(1.7)" })
-      .fromTo("#reports-table tr", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.3, stagger: 0.05 }, "-=0.3");
+    gsap.fromTo(".stat-card", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.1 });
+    gsap.fromTo("#reports-table tr", { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.3, stagger: 0.03 });
 }
