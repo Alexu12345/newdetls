@@ -15,9 +15,9 @@ const db = firebase.firestore();
 let accountsData = {};
 let userRates = {};
 let lastFetchedRecords = []; 
-let currentViewMode = 'date'; // الوضع الافتراضي للسويتش
+let currentViewMode = 'date'; 
 
-// 3. الدوال المساعدة
+// 3. الدوال المساعدة المحسنة
 const formatTime = (totalMinutes) => {
     if (!totalMinutes || totalMinutes <= 0) return "0س 0د 0ث";
     const totalSeconds = Math.floor(totalMinutes * 60);
@@ -29,52 +29,51 @@ const formatTime = (totalMinutes) => {
 
 const roundToTen = (amount) => Math.round(amount / 10) * 10;
 
-function getStatusClass(totalMinutes) {
-    const hours = totalMinutes / 60;
-    if (hours >= 150) return 'row-gold';
-    if (hours >= 100) return 'row-green';
-    if (hours >= 80) return 'row-yellow';
-    return 'row-red';
+// محرك الألوان الذكي بناءً على "البطل" (أعلى ساعات في النتائج الحالية)
+function getFlexibleStatusClass(currentMinutes, maxMinutes) {
+    if (!maxMinutes || maxMinutes <= 0) return '';
+    const percentage = (currentMinutes / maxMinutes) * 100;
+    
+    if (percentage >= 90) return 'row-gold';   // 90% فأكثر (البطل والمقربون منه)
+    if (percentage >= 75) return 'row-silver'; // 75% إلى 89% (ممتاز)
+    if (percentage >= 50) return 'row-green';  // 50% إلى 74% (جيد)
+    if (percentage >= 25) return 'row-yellow'; // 25% إلى 49% (متوسط)
+    return 'row-red';                          // أقل من 25% (ضعيف)
 }
 
 function getDynamicFileName() {
     const userF = document.getElementById('user-filter');
     const accF = document.getElementById('account-filter');
     const dateM = document.getElementById('date-type').value;
-    let parts = [];
+    let parts = [getDynamicFileNameTitle()]; // استخدام العنوان الديناميكي
     if (userF.value !== 'all') parts.push(userF.value);
     if (accF.value !== 'all') parts.push(accF.options[accF.selectedIndex].text);
-    if (dateM === 'day') parts.push(document.getElementById('date-val')?.value || "");
-    else if (dateM === 'month') {
-        const mVal = document.getElementById('month-val')?.value;
-        if(mVal) parts.push(new Date(mVal).toLocaleDateString('ar-EG', {month:'long', year:'numeric'}));
-    }
-    return parts.length ? parts.join(' - ') : "تقرير_عام";
+    return parts.join(' - ');
 }
 
-// 4. المحرك الرئيسي
+// 4. المحرك الرئيسي عند التشغيل
 window.onload = async () => {
     const themeToggle = document.getElementById('theme-toggle');
     const dateType = document.getElementById('date-type');
     const dynamicDateContainer = document.getElementById('dynamic-date-container');
     const viewSwitch = document.getElementById('view-switch-container');
+    const btnMonths = document.getElementById('view-months');
 
-    // --- التبديل بين الأوضاع (Pivot Logic) ---
-    document.getElementById('view-days').onclick = function() {
-        updateSwitchUI(this);
-        currentViewMode = 'date';
-        processAndRender(lastFetchedRecords, 'all', 'all');
-    };
-    document.getElementById('view-users').onclick = function() {
-        updateSwitchUI(this);
-        currentViewMode = 'userName';
-        processAndRender(lastFetchedRecords, 'all', 'all');
+    // --- منطق السويتش الثلاثي ---
+    const switchButtons = {
+        'view-days': 'date',
+        'view-months': 'month',
+        'view-users': 'userName'
     };
 
-    function updateSwitchUI(btn) {
-        document.querySelectorAll('.switch-button button').forEach(b => b.classList.remove('active-switch'));
-        btn.classList.add('active-switch');
-    }
+    Object.keys(switchButtons).forEach(id => {
+        document.getElementById(id).onclick = function() {
+            document.querySelectorAll('.switch-button button').forEach(b => b.classList.remove('active-switch'));
+            this.classList.add('active-switch');
+            currentViewMode = switchButtons[id];
+            processAndRender(lastFetchedRecords); 
+        };
+    });
 
     // --- الدارك مود ---
     const toggleTheme = (isDark) => {
@@ -88,16 +87,16 @@ window.onload = async () => {
     };
     if (localStorage.getItem('theme') === 'dark') toggleTheme(true);
 
-    // --- جلب البيانات الأساسية ---
-    const [accs, rates] = await Promise.all([
+    // --- جلب بيانات الحسابات والموظفين ---
+    const [accSnap, rateSnap] = await Promise.all([
         db.collection('accounts').get(),
         db.collection('userAccountRates').get()
     ]);
-    accs.forEach(doc => {
+    accSnap.forEach(doc => {
         accountsData[doc.id] = doc.data();
         document.getElementById('account-filter').innerHTML += `<option value="${doc.id}">${doc.data().name}</option>`;
     });
-    rates.forEach(doc => {
+    rateSnap.forEach(doc => {
         const d = doc.data();
         userRates[`${d.userId}_${d.accountId}`] = d.customPricePerHour;
     });
@@ -107,7 +106,7 @@ window.onload = async () => {
         document.getElementById('user-filter').innerHTML += `<option value="${doc.data().name}">${doc.data().name}</option>`;
     });
 
-    // --- حقول التاريخ ---
+    // --- إدارة حقول التاريخ ---
     dateType.onchange = () => {
         const val = dateType.value;
         dynamicDateContainer.classList.remove('hidden');
@@ -120,7 +119,7 @@ window.onload = async () => {
         else dynamicDateContainer.classList.add('hidden');
     };
 
-    // --- زر التصفية الرئيسي ---
+    // --- تنفيذ البحث الرئيسي ---
     document.getElementById('apply-filters-btn').onclick = async () => {
         document.getElementById('loader').classList.remove('hidden');
         let query = db.collection('workRecords');
@@ -130,22 +129,27 @@ window.onload = async () => {
         if(accF !== 'all') query = query.where('accountId', '==', accF);
         if(userF !== 'all') query = query.where('userName', '==', userF);
 
-        // إظهار/إخفاء السويتش
+        // إظهار سويتش الشهور فقط للنطاقات الطويلة
+        if (dateType.value === 'year' || dateType.value === 'range') btnMonths.classList.remove('hidden');
+        else {
+            btnMonths.classList.add('hidden');
+            if(currentViewMode === 'month') currentViewMode = 'date'; // إعادة ضبط للأيام
+        }
+
+        // إظهار السويتش العام
         if (accF === 'all' && userF === 'all') viewSwitch.classList.remove('hidden');
         else viewSwitch.classList.add('hidden');
 
+        // فلترة التاريخ
         const mode = dateType.value;
         let start, end;
-        if (mode === 'day') {
+        if (mode === 'day' && document.getElementById('date-val').value) {
             const v = document.getElementById('date-val').value;
-            if(v) { start = new Date(v+'T00:00:00'); end = new Date(v+'T23:59:59'); }
-        } else if (mode === 'month') {
+            start = new Date(v+'T00:00:00'); end = new Date(v+'T23:59:59');
+        } else if (mode === 'month' && document.getElementById('month-val').value) {
             const v = document.getElementById('month-val').value;
-            if(v) { 
-                const p = v.split('-'); 
-                start = new Date(p[0], p[1]-1, 1); 
-                end = new Date(p[0], p[1], 0, 23, 59, 59); 
-            }
+            const p = v.split('-'); 
+            start = new Date(p[0], p[1]-1, 1); end = new Date(p[0], p[1], 0, 23, 59, 59);
         } else if (mode === 'year') {
             const v = document.getElementById('year-val').value;
             start = new Date(v, 0, 1); end = new Date(v, 11, 31, 23, 59, 59);
@@ -164,12 +168,12 @@ window.onload = async () => {
             const snap = await query.get();
             lastFetchedRecords = [];
             snap.forEach(doc => lastFetchedRecords.push(doc.data()));
-            processAndRender(lastFetchedRecords, accF, userF);
+            processAndRender(lastFetchedRecords);
         } catch (err) { console.error(err); }
         document.getElementById('loader').classList.add('hidden');
     };
 
-    // --- البحث السريع ---
+    // --- البحث السريع مع التظليل ---
     document.getElementById('table-search').addEventListener('input', function() {
         const term = this.value.toLowerCase();
         const rows = document.querySelectorAll('#table-body tr');
@@ -200,17 +204,23 @@ window.onload = async () => {
     };
 };
 
-function processAndRender(records, accF, userF) {
+function processAndRender(records) {
+    const accF = document.getElementById('account-filter').value;
+    const userF = document.getElementById('user-filter').value;
+    
     let summary = {}, totalT = 0, totalM = 0;
     
-    // Pivot Logic Selection
-    let groupKey;
-    if (accF === 'all' && userF === 'all') groupKey = currentViewMode;
-    else groupKey = (userF !== 'all' && accF === 'all') ? 'accountId' : (accF !== 'all' && userF === 'all' ? 'userName' : 'date');
+    let groupKey = (accF === 'all' && userF === 'all') ? currentViewMode : 
+                   (userF !== 'all' && accF === 'all' ? 'accountId' : (accF !== 'all' && userF === 'all' ? 'userName' : 'date'));
 
     records.forEach(rec => {
-        let key = groupKey === 'accountId' ? (accountsData[rec.accountId]?.name || 'حساب غير معروف') :
-                  (groupKey === 'userName' ? rec.userName : new Date(rec.timestamp.seconds * 1000).toLocaleDateString('ar-EG'));
+        let key;
+        const dateObj = new Date(rec.timestamp.seconds * 1000);
+        
+        if (groupKey === 'accountId') key = accountsData[rec.accountId]?.name || 'حساب غير معروف';
+        else if (groupKey === 'userName') key = rec.userName;
+        else if (groupKey === 'month') key = dateObj.toLocaleDateString('ar-EG', {month:'long', year:'numeric'});
+        else key = dateObj.toLocaleDateString('ar-EG');
 
         if (!summary[key]) summary[key] = { time: 0, money: 0 };
         const rate = userRates[`${rec.userId}_${rec.accountId}`] || accountsData[rec.accountId]?.defaultPricePerHour || 0;
@@ -226,20 +236,30 @@ function processAndRender(records, accF, userF) {
 }
 
 function renderUI(summary, groupKey, totalT, totalM) {
-    const headText = groupKey === 'accountId' ? 'الحساب' : (groupKey === 'userName' ? 'الموظف' : 'التاريخ');
+    const headText = groupKey === 'accountId' ? 'الحساب' : (groupKey === 'userName' ? 'الموظف' : (groupKey === 'month' ? 'الشهر' : 'التاريخ'));
     document.getElementById('table-head-row').innerHTML = `<th>${headText}</th><th>إجمالي الوقت</th><th>التكلفة (مقربة)</th>`;
     
+    // حساب "البطل" للنسب المرنة
+    const maxTime = Math.max(...Object.values(summary).map(s => s.time), 0);
+    
     let html = '';
+    let topName = "-";
+    let topVal = -1;
+
     Object.keys(summary).forEach(k => {
-        const sClass = getStatusClass(summary[k].time);
+        const time = summary[k].time;
+        if(time > topVal) { topVal = time; topName = k; }
+
+        const sClass = getFlexibleStatusClass(time, maxTime);
         html += `<tr class="${sClass}">
             <td data-orig="${k}">${k}</td>
-            <td data-orig="${formatTime(summary[k].time)}">${formatTime(summary[k].time)}</td>
+            <td data-orig="${formatTime(time)}">${formatTime(time)}</td>
             <td data-orig="${roundToTen(summary[k].money).toLocaleString()} ج.م">${roundToTen(summary[k].money).toLocaleString()} ج.م</td>
         </tr>`;
     });
     
     document.getElementById('table-body').innerHTML = html;
+    document.getElementById('stat-top-performer').innerText = topName;
     document.getElementById('footer-total-time').innerText = formatTime(totalT);
     document.getElementById('footer-total-money').innerText = `${roundToTen(totalM).toLocaleString()} ج.م`;
     document.getElementById('stat-total-time').innerText = formatTime(totalT);
@@ -249,5 +269,5 @@ function renderUI(summary, groupKey, totalT, totalM) {
     document.getElementById('stats-container').classList.remove('hidden');
 
     gsap.fromTo(".stat-card", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.1 });
-    gsap.fromTo("#reports-table tr", { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.3, stagger: 0.03 });
+    gsap.fromTo("#reports-table tr", { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.3, stagger: 0.02 });
 }
