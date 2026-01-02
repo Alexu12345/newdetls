@@ -108,6 +108,13 @@
                     <i class="fas fa-search" style="align-self: center;"></i>
                     <input type="text" id="table-search" placeholder="ابحث عن اسم، حساب، أو تاريخ داخل الجدول...">
                 </div>
+                <div id="view-switch-container" class="hidden" style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 0.9rem; font-weight: 600;">عرض حسب:</span>
+                    <div class="switch-button">
+                        <button id="view-days" class="active-switch">الأيام</button>
+                        <button id="view-users">الموظفين</button>
+                    </div>
+                </div>
 
                 <div class="table-wrapper">
                     <table id="reports-table">
@@ -139,3 +146,4 @@
 </body>
 
 </html>
+
