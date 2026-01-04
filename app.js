@@ -329,20 +329,21 @@ function renderUI(summary, groupKey, totalT, totalM) {
         html += `<tr class="${sClass}">
             <td data-orig="${k}">${k}</td>
             <td data-orig="${formatTime(time)}">${formatTime(time)}</td>
-            <td>${roundToTen(summary[k].money).toLocaleString()} ج.م</td>
+            <td>${roundToTen(summary[k].money).toLocaleString()} $</td>
         </tr>`;
     });
     
     tableBody.innerHTML = html;
     document.getElementById('stat-top-performer').innerText = topName;
     document.getElementById('stat-total-time').innerText = formatTime(totalT);
-    document.getElementById('stat-total-money').innerText = `${roundToTen(totalM).toLocaleString()} ج.م`;
+    document.getElementById('stat-total-money').innerText = `${roundToTen(totalM).toLocaleString()} $`;
     document.getElementById('footer-total-time').innerText = formatTime(totalT);
-    document.getElementById('footer-total-money').innerText = `${roundToTen(totalM).toLocaleString()} ج.م`;
+    document.getElementById('footer-total-money').innerText = `${roundToTen(totalM).toLocaleString()} $`;
 
     document.getElementById('results-section').classList.remove('hidden');
     document.getElementById('stats-container').classList.remove('hidden');
 
     gsap.fromTo(".stat-card", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.1 });
 }
+
 
