@@ -29,10 +29,10 @@ const formatTime = (totalMinutes) => {
     if (!totalMinutes || totalMinutes <= 0) return "0س 0د";
     const h = Math.floor(totalMinutes / 60);
     const m = Math.round(totalMinutes % 60);
-    return `${h}س ${m}د`;
+    return `${h} س ${m} د`;
 };
 
-const roundToTen = (amount) => Math.round(amount / 10) * 10;
+const roundToTen = (amount) => amount.toFixed(2);
 
 function getFlexibleStatusClass(currentMinutes, maxMinutes) {
     if (!maxMinutes || maxMinutes <= 0) return '';
@@ -345,3 +345,4 @@ function renderUI(summary, groupKey, totalT, totalM) {
 
     gsap.fromTo(".stat-card", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.1 });
 }
+
